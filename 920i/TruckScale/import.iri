@@ -1,0 +1,209 @@
+-------------------------------------------------
+-- Used with iRev Configuration File
+-- F:\OneDrive\Customers\Simplot\WSI_Caldwell\Truckscale\TruckScale.920
+-------------------------------------------------
+
+
+-- Scale Aliases
+Scale1   : constant integer := 1;
+Scale2   : constant integer := 2;
+Scale3   : constant integer := 3;
+
+-- Setpoint Aliases
+SP1      : constant integer := 1;
+
+-- Widget Aliases
+Lbl1S1   : constant integer := 2;
+Lbl2S1   : constant integer := 3;
+Sym1S2   : constant integer := 5;
+Sym2S2   : constant integer := 6;
+Lbl2S2   : constant integer := 7;
+Lbl3S2   : constant integer := 8;
+Num1S3   : constant integer := 9;
+Num2S3   : constant integer := 10;
+Num3S3   : constant integer := 11;
+Sym1S3   : constant integer := 12;
+Sym2S3   : constant integer := 13;
+Sym3S3   : constant integer := 14;
+Sym4S3   : constant integer := 15;
+Sym5S3   : constant integer := 16;
+Sym6S3   : constant integer := 17;
+Lbl1S3   : constant integer := 18;
+Lbl2S3   : constant integer := 19;
+Lbl3S3   : constant integer := 20;
+Lbl4S3   : constant integer := 21;
+Lbl5S3   : constant integer := 22;
+Lbl6S3   : constant integer := 23;
+Lbl1S4   : constant integer := 24;
+Lbl2S4   : constant integer := 25;
+Lbl3S4   : constant integer := 26;
+Lbl4S4   : constant integer := 27;
+Lbl5S4   : constant integer := 28;
+Lbl6S4   : constant integer := 29;
+Lbl7S4   : constant integer := 30;
+Lbl8S4   : constant integer := 31;
+Lbl7S3   : constant integer := 32;
+Lbl4S2   : constant integer := 33;
+Lbl1S10  : constant integer := 34;
+Lbl2S10  : constant integer := 35;
+Lbl3S10  : constant integer := 36;
+Lbl9S4   : constant integer := 37;
+Lbl10S4  : constant integer := 38;
+Lbl11S4  : constant integer := 39;
+Lbl1S5   : constant integer := 40;
+Lbl2S5   : constant integer := 41;
+Lbl3S5   : constant integer := 42;
+Lbl4S5   : constant integer := 43;
+Lbl5S5   : constant integer := 44;
+Lbl6S5   : constant integer := 45;
+Lbl7S5   : constant integer := 46;
+Lbl8S5   : constant integer := 47;
+Lbl9S5   : constant integer := 48;
+Lbl10S5  : constant integer := 49;
+Lbl11S5  : constant integer := 50;
+Lbl12S5  : constant integer := 51;
+Lbl13S5  : constant integer := 52;
+Lbl14S5  : constant integer := 53;
+Lbl15S5  : constant integer := 54;
+Lbl16S5  : constant integer := 55;
+Lbl17S5  : constant integer := 56;
+Lbl18S5  : constant integer := 57;
+Lbl19S5  : constant integer := 58;
+Lbl20S5  : constant integer := 59;
+Lbl21S5  : constant integer := 60;
+Lbl22S5  : constant integer := 61;
+Lbl23S5  : constant integer := 62;
+Lbl24S5  : constant integer := 63;
+Lbl25S5  : constant integer := 64;
+Lbl26S5  : constant integer := 65;
+Lbl27S5  : constant integer := 66;
+Lbl28S5  : constant integer := 67;
+Lbl29S5  : constant integer := 68;
+Lbl30S5  : constant integer := 69;
+Lbl31S5  : constant integer := 70;
+Lbl32S5  : constant integer := 71;
+Lbl33S5  : constant integer := 72;
+Lbl34S5  : constant integer := 73;
+Lbl35S5  : constant integer := 74;
+Lbl36S5  : constant integer := 75;
+Lbl37S5  : constant integer := 76;
+Lbl38S5  : constant integer := 77;
+Lbl39S5  : constant integer := 78;
+Lbl40S5  : constant integer := 79;
+Lbl41S5  : constant integer := 80;
+Lbl42S5  : constant integer := 81;
+Lbl43S5  : constant integer := 82;
+Lbl44S5  : constant integer := 83;
+Lbl45S5  : constant integer := 84;
+Lbl46S5  : constant integer := 85;
+Lbl47S5  : constant integer := 86;
+Lbl48S5  : constant integer := 87;
+Lbl8S3   : constant integer := 88;
+Totscn2  : constant integer := 89;
+LblTot   : constant integer := 90;
+Lbl13S4  : constant integer := 91;
+
+-- Serial Port Aliases
+Port1    : constant integer := 1;
+Port2    : constant integer := 2;
+Port3    : constant integer := 3;
+Port4    : constant integer := 4;
+
+-- Analog Output Card Aliases
+
+-- Digital I/O Aliases
+DIOCRD0  : constant integer := 0;
+DIO0_1   : constant integer := 1;
+DIO0_2   : constant integer := 2;
+DIO0_3   : constant integer := 3;
+DIO0_4   : constant integer := 4;
+DIO0_5   : constant integer := 5;
+DIO0_6   : constant integer := 6;
+DIO0_7   : constant integer := 7;
+DIO0_8   : constant integer := 8;
+DIO0_9   : constant integer := 9;
+DIO0_10  : constant integer := 10;
+DIO0_11  : constant integer := 11;
+DIO0_12  : constant integer := 12;
+DIO0_13  : constant integer := 13;
+DIO0_14  : constant integer := 14;
+DIO0_15  : constant integer := 15;
+DIO0_16  : constant integer := 16;
+DIO0_17  : constant integer := 17;
+DIO0_18  : constant integer := 18;
+DIO0_19  : constant integer := 19;
+DIO0_20  : constant integer := 20;
+DIO0_21  : constant integer := 21;
+DIO0_22  : constant integer := 22;
+DIO0_23  : constant integer := 23;
+DIO0_24  : constant integer := 24;
+
+-- Database Type Definitions and Field Aliases
+type TruckDatabase is Database ("Truck")
+	ID       : string;
+	Pri_Wgt  : real;
+	Sec_Wgt  : real;
+	Ter_Wgt  : real;
+	TimeDate : datetime;
+	Scale    : integer;
+	Keyed    : integer;
+end database;
+
+Truck_ID          : constant integer := 1;
+Truck_Pri_Wgt     : constant integer := 2;
+Truck_Sec_Wgt     : constant integer := 3;
+Truck_Ter_Wgt     : constant integer := 4;
+Truck_TimeDate    : constant integer := 5;
+Truck_Scale       : constant integer := 6;
+Truck_Keyed       : constant integer := 7;
+
+type TransDatabase is Database ("Trans")
+	Ticket   : integer;
+	Truck    : string;
+	DateIn   : datetime;
+	DateOut  : datetime;
+	AxleIn1  : real;
+	AxleIn2  : real;
+	AxleOut1 : real;
+	AxleOut2 : real;
+	Axles    : integer;
+end database;
+
+Trans_Ticket      : constant integer := 1;
+Trans_Truck       : constant integer := 2;
+Trans_DateIn      : constant integer := 3;
+Trans_DateOut     : constant integer := 4;
+Trans_AxleIn1     : constant integer := 5;
+Trans_AxleIn2     : constant integer := 6;
+Trans_AxleOut1    : constant integer := 7;
+Trans_AxleOut2    : constant integer := 8;
+Trans_Axles       : constant integer := 9;
+
+type SetupDatabase is Database ("Setup")
+	Header1  : string;
+	Header2  : string;
+	Header3  : string;
+	Header4  : string;
+	Scales   : integer;
+	Buzzer   : integer;
+	Printer  : integer;
+	Remote   : integer;
+	StoreRec : integer;
+	Axle     : integer;
+	Ticket   : integer;
+end database;
+
+Setup_Header1     : constant integer := 1;
+Setup_Header2     : constant integer := 2;
+Setup_Header3     : constant integer := 3;
+Setup_Header4     : constant integer := 4;
+Setup_Scales      : constant integer := 5;
+Setup_Buzzer      : constant integer := 6;
+Setup_Printer     : constant integer := 7;
+Setup_Remote      : constant integer := 8;
+Setup_StoreRec    : constant integer := 9;
+Setup_Axle        : constant integer := 10;
+Setup_Ticket      : constant integer := 11;
+
+
+

@@ -1,0 +1,1437 @@
+------------------------------------------------------------------------------
+-- Program Name: TruckScale 
+--
+-- Copyright 2015 Total Scale Service as an unpublished work. 
+-- All Rights Reserved.
+--
+-- The information contained herein is confidential property of 
+-- Company Name.  The use, copying, transfer or disclosure of such
+-- information is prohibited except by express written agreement with
+-- Company Name.
+--
+-- First written on November 25, 2015 by Matthew Burkett.
+--
+-- Module Description:
+-- This file is the iRite source code for a 920i program.
+--
+-- This program will (fill in detailed description of the programs
+-- purpose here).
+------------------------------------------------------------------------------
+
+-- Please keep all lines 79 characters or less. 
+-- This line is exactly 79 characters long. ----------------------------------
+
+
+-- The name of the program is always the first line of code.
+program TruckScale;
+
+-- Put Include (.iri) file here.  
+#include import.iri  
+
+  ----------------------------------------------------------------------------
+  -- Begin constants and aliases definitions here.
+  
+  g_csProgName : constant string := "TruckScale";  
+  g_csVersion : constant string := "0.01";
+ 
+  -- End of constants and aliases.
+  ----------------------------------------------------------------------------
+  
+
+  ----------------------------------------------------------------------------
+  -- Begin user created types (enumerations, records, arrays) definitions.
+type integerarray is array[5] of integer; 
+type inarray is array[100] of integer;
+type stringarray is array[100] of string;
+type realarray is array[100] of real;
+
+  -- End of user created types (enumerations, records, arrays).
+  ----------------------------------------------------------------------------
+
+
+
+  ----------------------------------------------------------------------------
+  -- Start global variables definitions here.  Don't forget to initialize 
+  -- them in the system startup event handler.
+  
+  -- Configuration Variables
+  g_Header1     : string;     -- Stores Print Header
+  g_Header2     : string;     -- Stores Print Header
+  g_Header3     : string;     -- Stores Print Header
+  g_Header4     : string;     -- Stores Print Header                                         
+  g_Scales      : integer;    -- Number of Scales Present 1-3
+  g_Buzzer      : integer;    -- Buzzer active  0=No  1=Yes
+  g_Printer     : integer;    -- Printer Type  0=TMU295  1=TMU220
+  g_Remote      : integer;    -- Remote Display  0=None  1=Standard Condec  2=WRTX8
+  g_StoreRecords  : integer;  -- Store Completed Transactions   0=No  1=Yes
+  g_Axling      : integer;    -- Perform Axling  0=None  1=Pup  2=Axle
+  
+  g_TotalLocation   : integerarray; -- Stores the location of the total Wt field for all 3 screens
+  g_UnitsLocation   : integerarray; -- Stores the location of the units field for all 3 screens
+ 
+  -- Inbound Truck Storage
+  g_iInboundTotal   : integer;  -- Used to handle total Inbound Tickets
+  g_iScreenPosition : integer;  -- Used to keep track of the First Displayed Ticket 
+  g_iCurrentSelection   : integer;  -- Used to keep track of the user's selection.
+  g_iInbound_Axles  : inarray;    -- Stores the number of axles
+  g_sTicket         : stringarray;    -- Stoes all inbound tickets numbers
+  g_sTruckID        : stringarray;    -- Stores all the inbound Truck IDs
+  g_rWeightIn       : realarray; -- Stores all the inbound Truck Weights
+  g_sDateTicket     : stringarray;-- Stores all the inbound Truck Dates
+  
+  -- Current Truck variables
+  g_TicketNumber  : integer;
+  g_CurrentTruckID  : string;
+  g_DateIn    : datetime;
+  g_TruckWt1  : real;
+  g_TruckWt2  : real;
+  g_TruckWt3  : real;
+  g_TruckAxles  : integer;
+  
+  -- Program Status Variables
+  g_Level       : integer;    -- Current Program Level 0 = Main  1 = Setup
+  g_ProcessStep : integer;    -- Current Process Step
+  g_CurrentWt   : real;
+  g_InboundWt   : real;
+  g_Reset       : integer;
+  g_CurrentUnits  : units;
+   
+  g_iBuild       : integer;
+  g_srcResult    : SysCode;
+
+  -- End of global variables.  
+  ----------------------------------------------------------------------------
+
+
+  ----------------------------------------------------------------------------
+  -- Start functions and procedures definitions here.
+
+  
+function FindTruck(TruckID  : string) : integer;
+--Declaration Section
+TruckFound  : integer;
+TransDB : TransDatabase;
+
+begin
+  
+  -- Clear Globals before starting
+  g_CurrentTruckID:="";
+  g_TruckWt1:=0;
+  g_TruckWt2:=0;
+  g_TruckAxles:=0;
+  
+  TransDB.Truck:=TruckID;
+  if TransDB.FindFirst(2) = SysOk then
+  
+    g_CurrentTruckID:=TransDB.Truck;
+    g_DateIn:=TransDB.DateIn;
+    g_TruckWt1:=TransDB.AxleIn1;
+    g_TruckWt2:=TransDB.AxleIn2;
+    g_TruckAxles:=TransDB.Axles;
+    TruckFound:=1;
+    
+  end if;  
+
+  return(TruckFound);
+  
+end;
+
+
+function SaveRecord : integer;
+--Declaration Section
+RecordSaved : integer;
+TransDB : TransDatabase;
+SetupDB : SetupDatabase;
+
+begin
+  
+  RecordSaved:=0;
+  
+  -- Increment the ticket number
+  
+  SetupDB.GetFirst;
+  g_TicketNumber:=SetupDb.Ticket+1;
+  SetupDB.Ticket:=g_TicketNumber;
+  SetupDB.Update;
+  
+  -- Check for existing truck
+  TransDB.Truck:=g_CurrentTruckID;
+  g_DateIn:=SystemTime;
+  g_TruckAxles:=1;
+  TransDB.Ticket:=g_TicketNumber;
+  TransDB.DateIn:=g_DateIn;
+  TransDB.AxleIn1:=g_CurrentWt;
+  TransDB.AxleIn2:=0;
+  TransDB.AxleOut1:=0;
+  TransDB.AxleOut2:=0;
+  TransDB.Axles:=g_TruckAxles;
+  
+  if TransDB.Add = SysOk then
+  
+    RecordSaved:=1;
+    
+  end if;  
+  
+  
+  return(RecordSaved);
+  
+end;
+
+function DeleteRecord(TruckID : string) : integer;
+--Declaration Section
+RecordDeleted : integer;
+TransDB : TransDatabase;
+
+begin
+  
+  RecordDeleted:=0;
+  
+  TransDB.Truck:=g_CurrentTruckID;
+  
+  if TransDB.FindFirst(2)=SysOk then
+  
+    if TransDB.Delete = SysOk then
+    
+      RecordDeleted:=1;
+    
+    end if;
+    
+  end if;
+    
+   
+  return(RecordDeleted);
+  
+end;
+
+
+
+function LoadRecord : integer;
+--Declaration Section
+RecordLoaded : integer;
+TransDB : TransDatabase;
+
+begin
+  
+  RecordLoaded:=0;
+  
+  TransDB.Truck:=g_CurrentTruckID;
+  if TransDB.FindFirst(2)=SysOk then
+  
+    g_DateIn:=TransDB.DateIn;
+    g_TruckAxles:=TransDB.Axles;
+    g_TicketNumber:=TransDB.Ticket;
+    g_TruckAxles:=TransDB.Axles;
+    g_InboundWt:=TransDB.AxleIn1;
+    RecordLoaded:=1;
+  
+  end if;
+    
+   
+  return(RecordLoaded);
+  
+end;
+
+procedure WriteStatusFields(sStatus : string);
+
+begin
+  
+  SetLabelText(2,sStatus);
+  SetLabelText(3,"");
+  SetLabelText(7,sStatus);
+  SetLabelText(8,"");
+  SetLabelText(22,sStatus);
+  SetLabelText(23,"");
+  SetLabelText(31,sStatus);
+  SetLabelText(87,sStatus);
+  StartTimer(1);
+  
+  
+  return;
+  
+end;
+
+
+    
+  ---------------------------------------------------------------------------- 
+  --  Procedure Name    : DisplayVersion 
+  --  Created by        : Company Name or Programmer Name
+  --  Last modified on  : Jan 15, 2002  
+  --  Purpose           : This procedure will diplay the program name and
+  --                      version number to the diplay. 
+  --  Value Parameters  : none
+  --  Variable Params   : none
+  --  Side Effects      : The program name and version is put on the display.
+  ---------------------------------------------------------------------------- 
+  procedure DisplayVersion; 
+  
+  begin
+   
+    DisplayStatus(g_csProgName + " V1.00");
+  
+  end;
+
+
+
+procedure VerifyWeight(TruckID  : string);
+--Declaration Section
+
+begin
+  
+  g_CurrentTruckID:=TruckID;
+  StopTimer(1);
+  SelectScreen(4);
+  
+  SetLabelText(lbl9s4,TruckID);
+  SetLabelText(lbl2s4,Date$(SystemTime));
+  SetLabelText(lbl4s4,Time$(SystemTime));
+  SetLabelText(lblTot,RealToString(g_CurrentWt,6,0));
+  
+  SetLabelText(lbl8s4,"Is This Correct?");
+  SetSoftkeyText(1,"YES");
+  SetSoftkeyText(2,"");
+  SetSoftkeyText(3,"");
+  SetSoftkeyText(4,"");
+  SetSoftkeyText(5,"NO");
+
+  return;
+  
+end;
+
+
+procedure Save_Config;
+
+SetupDB : SetupDatabase;
+
+begin
+  
+  g_Reset:=0;
+  g_Header1:=g_sTruckID[1];
+  g_Header2:=g_sTruckID[2];
+  g_Header3:=g_sTruckID[3];
+  g_Header4:=g_sTruckID[4];
+  g_Scales:=StringToInteger(g_sTruckID[5]);
+  g_Buzzer:=StringToInteger(g_sTruckID[6]);
+  g_Printer:=StringToInteger(g_sTruckID[7]);
+  g_Remote:=StringToInteger(g_sTruckID[8]);
+  g_StoreRecords:=StringToInteger(g_sTruckID[9]);
+  g_Axling:=StringToInteger(g_sTruckID[10]);
+  
+  SetupDB.Ticket:=g_TicketNumber;
+  SetupDB.Header1:=g_Header1;
+  SetupDB.Header2:=g_Header2;
+  SetupDB.Header3:=g_Header3;
+  SetupDB.Header4:=g_Header4;
+  SetupDB.Scales:=g_Scales;
+  SetupDB.Buzzer:=g_Buzzer;
+  SetupDB.Printer:=g_Printer;
+  SetupDB.Remote:=g_Remote;
+  SetupDB.StoreRec:=g_StoreRecords;
+  SetupDB.Axle:=g_Axling;
+  
+  if SetupDB.Update <> SysOk then
+    
+    g_Reset:=1;
+    WriteStatusFields("Unable to Save Config DB"); 
+    
+  else
+  
+    WriteStatusFields("Configuration Saved."); 
+  
+  end if;  
+  
+  return;
+  
+end;
+
+
+procedure Load_Config;
+
+SetupDB : SetupDatabase;
+
+begin
+  
+  g_Reset:=0;
+  if SetupDB.GetFirst = SysOk then
+  
+    g_TicketNumber:=SetupDB.Ticket;
+    g_Header1:=SetupDB.Header1;
+    g_Header2:=SetupDB.Header2;
+    g_Header3:=SetupDB.Header3;
+    g_Header4:=SetupDB.Header4;
+    g_Scales:=SetupDB.Scales;
+    g_Buzzer:=SetupDB.Buzzer;
+    g_Printer:=SetupDB.Printer;
+    g_Remote:=SetupDB.Remote;
+    g_StoreRecords:=SetupDB.StoreRec;
+    g_Axling:=SetupDB.Axle;
+    
+    WriteStatusFields("Configuration Loaded.");
+    
+  else
+    
+    g_TicketNumber:=0;
+    g_Header1:="Demo Company";
+    g_Header2:="Demo Address";
+    g_Header3:="Demo City, State";
+    g_Header4:="Demo Phone Number";
+    g_Scales:=3;
+    g_Buzzer:=0;
+    g_Printer:=0;
+    g_Remote:=0;
+    g_StoreRecords:=0;
+    g_Axling:=0;
+    
+    SetupDB.Ticket:=g_TicketNumber;
+    SetupDB.Header1:=g_Header1;
+    SetupDB.Header2:=g_Header2;
+    SetupDB.Header3:=g_Header3;
+    SetupDB.Header4:=g_Header4;
+    SetupDB.Scales:=g_Scales;
+    SetupDB.Buzzer:=g_Buzzer;
+    SetupDB.Printer:=g_Printer;
+    SetupDB.Remote:=g_Remote;
+    SetupDB.StoreRec:=g_StoreRecords;
+    SetupDB.Axle:=g_Axling;
+    
+    if SetupDB.Add = SysOk then
+    
+      WriteStatusFields("Config Database Initialized.");
+      
+    else
+      
+      g_Reset:=1;
+      WriteStatusFields("Unable to Create or Access Config DB");
+      
+    end if;  
+  
+  end if;
+  
+  return;
+  
+end;
+
+procedure UpdateDisplay;
+--Declaration Section
+
+begin
+  
+  SelectScreen(g_Scales);
+  
+  SetSoftkeyText(1,"IN");
+  SetSoftkeyText(2,"OUT");
+  SetSoftkeyText(3,"Set Time");
+  SetSoftkeyText(4,"");
+  SetSoftkeyText(5,"Setup");
+  
+  return;
+  
+end;
+
+
+procedure ResetScale;
+--Declaration Section
+
+begin
+  
+  --WriteLn(1,"Reset scale called.");
+  DisableHandler(Navkeypressed);
+  StartTimer(2);
+  g_ProcessStep:=0;
+  g_Level:=0;
+  UpdateDisplay;
+  
+  return;
+  
+end;
+
+
+procedure PrepareConfig;
+--Declaration Section
+
+begin
+
+  g_iInboundTotal:=10;
+  g_iScreenPosition:=1;
+  g_iCurrentSelection:=1;
+  
+  g_sTicket[1]:="Header 1";
+  g_sTruckID[1]:=g_Header1;
+  g_sTicket[2]:="Header 2";
+  g_sTruckID[2]:=g_Header2;
+  g_sTicket[3]:="Header 3";
+  g_sTruckID[3]:=g_Header3;
+  g_sTicket[4]:="Header 4";
+  g_sTruckID[4]:=g_Header4;
+  g_sTicket[5]:="# Scales";
+  g_sTruckID[5]:=IntegerToString(g_Scales,1);
+  g_sTicket[6]:="Buzzer";
+  g_sTruckID[6]:=IntegerToString(g_Buzzer,1);
+  g_sTicket[7]:="Printer";
+  g_sTruckID[7]:=IntegerToString(g_Printer,1);
+  g_sTicket[8]:="Remote";
+  g_sTruckID[8]:=IntegerToString(g_Remote,1);
+  g_sTicket[9]:="Keep Tkts";
+  g_sTruckID[9]:=IntegerToString(g_StoreRecords,1);
+  g_sTicket[10]:="Axling";
+  g_sTruckID[10]:=IntegerToString(g_Axling,1);
+    
+
+  return;
+  
+end;
+
+
+procedure DisplayConfig;
+--Declaration Section
+index : integer;
+iPointer  : integer;
+
+begin
+  
+  --WriteLn(1,"Display Config called.");
+  
+  SelectScreen(5);
+  
+  SetLabelText(lbl1s5,"Param");
+  SetLabelText(lbl2s5,"Setting");
+  
+  for index:=0 to 6
+  loop
+    
+    iPointer:=index+g_iScreenPosition;
+    if iPointer = g_iCurrentSelection then
+    
+      SetLabelText(45+index," =>");
+      
+    else
+    
+      SetLabelText(45+index,"   ");
+    
+    end if;
+    
+    SetLabelText(52+index,g_sTicket[iPointer]);
+    SetLabelText(66+index,"");
+    SetLabelText(73+index,"");
+    SetLabelText(80+index,"");
+    
+    if iPointer < 6 then
+    
+      SetLabelText(59+index,g_sTruckID[iPointer]);
+      
+    elsif iPointer = 6 or iPointer = 9 then
+    
+      if g_sTruckID[iPointer]="1" then
+      
+        SetLabelText(59+index,"On");
+      
+      else
+      
+        SetLabelText(59+index,"Off");
+      
+      end if;             
+    
+    elsif iPointer = 7 then
+    
+      if g_sTruckID[iPointer]="0" then
+      
+        SetLabelText(59+index,"TMU295");
+    
+      elsif g_sTruckID[iPointer]="1" then
+        
+        SetLabelText(59+Index,"TMU220");
+        
+      end if;
+      
+    elsif iPointer = 8 then
+    
+      if g_sTruckID[iPointer]="0" then
+      
+        SetLabelText(59+index,"None");
+    
+      elsif g_sTruckID[iPointer]="1" then
+        
+        SetLabelText(59+Index,"Condec");
+      
+      elsif g_sTruckID[iPointer]="2" then
+        
+        SetLabelText(59+Index,"WRTX8");
+        
+      end if;  
+      
+    elsif iPointer = 10 then
+        
+      if g_sTruckID[iPointer]="0" then
+      
+        SetLabelText(59+index,"None");
+    
+      elsif g_sTruckID[iPointer]="1" then
+        
+        SetLabelText(59+Index,"Pup");
+      
+      elsif g_sTruckID[iPointer]="2" then
+        
+        SetLabelText(59+Index,"Axling");
+        
+      end if;  
+      
+    end if;
+    
+  end loop;  
+  
+  SetLabelText(91,"^v to move 'ENTER' to Select");
+  SetSoftkeyText(1,"Main Menu");
+  SetSoftkeyText(2,"");
+  SetSoftkeyText(3,"Time Date");
+  SetSoftkeyText(4,"");
+  SetSoftkeyText(5,"");
+  
+  return;
+  
+end;
+
+procedure Display_Inbound;
+
+begin
+
+
+  return;
+  
+end;
+
+procedure StartInbound;
+
+begin
+  
+  --WriteLn(1,"Inbound Started");
+  
+  return;
+  
+end;
+
+
+procedure Load_Inbound;
+--Declaration Section
+TransDb  : TransDatabase;
+index   : integer;
+
+begin
+    
+    g_Reset:=0;       
+    TransDb.Sort(1);
+    for index:=1 to 100 -- Clear Arrays before use.
+    loop
+        
+        g_iInbound_Axles[index]:=0;
+        g_sTicket[index]:="";
+        g_sTruckID[index]:="";
+        g_rWeightIn[index]:=0;
+        g_sDateTicket[index]:="";
+        
+    end loop;
+
+    if TransDb.GetFirst=SysOk then
+    
+        g_iInboundTotal:=0;
+        
+        loop
+            
+            if TransDB.AxleOut1 = 0 then -- if no Date Out its an inbound ticket   
+            
+              g_iInboundTotal:=g_iInboundTotal+1;
+              g_sTicket[g_iInboundTotal]:=TransDb.Truck;   
+              g_rWeightIn[g_iInboundTotal]:=TransDb.AxleIn1+TransDb.AxleIn2;
+              g_iInbound_Axles[g_iInboundTotal]:=TransDb.Axles;  
+              g_sDateTicket[g_iInboundTotal]:=Time$(TransDb.DateIn);
+              g_sDateTicket[g_iInboundTotal]:=g_sDateTicket[g_iInboundTotal]+" "+Date$(TransDb.DateIn);
+            
+            end if;  
+            if TransDb.GetNext<>SysOk then
+                   
+                exit;
+                
+            end if;
+                
+        end loop;
+    
+    else
+    
+        g_Reset:=1;
+        WriteStatusFields("Unable to Load Transaction DB");
+      
+    end if;    
+    
+    if g_iInboundTotal > 1 then    -- If the database has records then set variables
+    
+        g_iScreenPosition:=1;
+        g_iCurrentSelection:=1;
+    
+    end if;
+    
+    return;
+    
+end;
+
+procedure PrintOutboundTicket;
+
+--Declaration Section
+Index   : integer;
+rNet  : real;
+
+begin
+    
+    for index:=1 to 23
+    loop
+        WriteLn(3,"");
+    end loop;
+    WriteLn(3,"");
+    WriteLn(3,"       Weigh-Out:");
+    WriteLn(3,"       "+Time$(SystemTime)+"  "+Date$(SystemTime));
+  
+--      WriteLn(3,"                         Steer Weight:  "+RealToString(g_TruckWt1,6,0)+" lb");
+--      WriteLn(3,"                         Drive Weight:  "+RealToString(g_TruckWt2,6,0)+" lb");
+--      WriteLn(3,"                       Trailer Weight:  "+RealToString(g_TruckWt3,6,0)+" lb");
+    
+--      if g_iAxle_Count=2 then
+--          WriteLn(3,"                           Pup Weight:  "+RealToString(g_rInbound_Axles[2],6,0)+" lb");
+--      else
+--          WriteLn(3,"                           Pup Weight:   No Pup");
+--      end if;    
+--      WriteLn(3,"                   Total Truck Weight:  "+RealToString(g_CurrentWt,6,0)+" lb");
+    
+    if g_InboundWt >= g_CurrentWt then
+  
+        rNet:=g_InboundWt - g_CurrentWt;
+        WriteLn(3,"       "+RealToString(g_InboundWt,6,0)+" lb    Gross");
+        WriteLn(3,"       "+RealToString(g_CurrentWt,6,0)+" lb    Tare");
+        WriteLn(3,"       "+RealToString(rNet,6,0)+" lb    Net");
+        WriteLn(3,"      "+RealToString(rNet,5,2)+" ton   Net");
+   
+    else
+
+        rNet:=g_InboundWt - g_CurrentWt;
+        WriteLn(3,"       "+RealToString(g_CurrentWt,6,0)+" lb    Gross");
+        WriteLn(3,"       "+RealToString(g_InboundWt,6,0)+" lb    Tare");
+        WriteLn(3,"       "+RealToString(rNet,6,0)+" lb    Net");
+        WriteLn(3,"      "+RealToString(rNet,5,2)+" ton   Net");
+   
+    end if;
+  
+    WriteLn(1,Chr$(27)+"e1");
+    Write(1,Chr$(27)+"q");
+    
+    return;
+    
+end;
+
+
+
+procedure PrintInboundTicket;
+
+--Declaration Section
+counter : integer;
+begin
+    
+    for counter:=1 to 11
+    loop
+        WriteLn(3," ");
+    end loop;
+    WriteLn(3,"       Weigh-In:");
+    WriteLn(3,"       Ticket #: "+IntegerToString(g_TicketNumber,6));
+    WriteLn(3,"       "+Time$(g_DateIn)+"  "+Date$(g_DateIn));
+    WriteLn(3,"       Truck ID #: "+g_CurrentTruckID);
+    
+
+--      WriteLn(3,"                         Steer Weight:  "+RealToString(g_TruckWt1,6,0)+" lb");
+--      WriteLn(3,"                         Drive Weight:  "+RealToString(g_TruckWt2,6,0)+" lb");
+--      WriteLn(3,"                       Trailer Weight:  "+RealToString(g_TruckWt3,6,0)+" lb");
+      
+--      if g_iAxle_Count=2 then
+--          WriteLn(3,"                           Pup Weight:  "+RealToString(g_rInbound_Axles[2],6,0)+" lb");
+--      else
+--          WriteLn(3,"                           Pup Weight:   No Pup");
+--      end if;    
+
+    WriteLn(3,"       Inbound Truck Weight:  "+RealToString(g_CurrentWt,6,0)+" lb");
+    WriteLn(3,Chr$(27)+"e1");
+    Write(3,Chr$(27)+"q");
+        
+    return;
+    
+end;
+
+
+
+procedure ClearStatusFields;
+
+begin
+  
+  SetLabelText(2,"");
+  SetLabelText(3,"");
+  SetLabelText(7,"");
+  SetLabelText(8,"");
+  SetLabelText(22,"");
+  SetLabelText(23,"");
+  SetLabelText(31,"");
+  SetLabelText(87,"");
+  
+  
+  
+  return;
+  
+end;
+
+
+  -- End of functions and procedures.
+  ----------------------------------------------------------------------------
+
+
+  ----------------------------------------------------------------------------
+  -- Begin event handler definitions here.
+
+handler Timer1Trip;
+--Declaration Section
+screen  : integer;
+
+begin
+  
+  ClearStatusFields;
+  
+  if g_Reset = 1 then
+  
+    ResetScale;
+    
+  end if;
+  
+  return;
+  
+end;
+
+handler Timer2Trip;  -- Total the Scales
+--Declaration Section
+index : integer;
+ScreenID  : integer;
+
+ScaleWt : real;
+TotalWt : real;
+
+begin
+  
+  
+  if g_ProcessStep = 1 then
+  
+    ScreenID:=4;
+    
+  else
+  
+    ScreenID:=g_Scales;
+    
+  end if;
+  
+  TotalWt:=0;
+    
+  if g_Scales > 1 then
+    
+    for index:=1 to g_Scales
+    loop
+    
+      GetGross(index,Primary,ScaleWt);
+      TotalWt:=TotalWt+ScaleWt;
+      
+      if index=1 then
+        g_TruckWt1:=ScaleWt;
+      elsif index = 2 then
+        g_TruckWt2:=ScaleWt;
+      elsif index = 3 then
+        g_TruckWt3:=ScaleWt;
+      end if;
+   
+    end loop;
+    
+    GetUnits(1,g_CurrentUnits);
+    
+    SetLabelText(g_TotalLocation[ScreenID],RealToString(TotalWt,6,0));
+    SetLabelText(g_UnitsLocation[ScreenID],"lbs");
+    
+    g_CurrentWt:=TotalWt;
+      
+  else
+    
+    GetGross(1,Primary,ScaleWt);
+    StopTimer(2);   -- if g_Scales = 1 then no need to calculate totals.
+    g_CurrentWt:=ScaleWt;
+    
+  end if;
+      
+  return;
+  
+end;
+
+handler Timer3Trip;
+StringOut : string;
+Motion  : integer;
+
+begin
+  
+  InMotion(1,Motion);
+  
+  if Motion > 0 then
+  
+    StringOut:=Chr$(2)+" "+RealToString(g_CurrentWt,6,0)+"LGM";
+  
+  else
+  
+    StringOut:=Chr$(2)+" "+RealToString(g_CurrentWt,6,0)+"LG ";
+  
+  end if;  
+  WriteLn(4,StringOut);
+  
+  return;
+  
+end;
+
+handler Timer10Trip;
+
+begin
+
+    Write(4,"@=1"+Chr$(13)+Chr$(34)+"Total:          "+Chr$(13));
+    
+    -- Write to Weigh Tronix Remote Display
+    StartTimer(11);
+    return;
+    
+end;
+
+handler Timer11Trip;
+
+begin
+
+    Write(4,RealToString(g_CurrentWt,6,0)+Chr$(13));
+    
+    StartTimer(12);
+    return;
+    
+end;
+
+handler Timer12Trip;
+
+begin
+
+    Write(4,Chr$(34)+"Steer:          "+Chr$(13));
+          
+    StartTimer(13);
+    return;
+    
+end;
+
+handler Timer13Trip;
+
+begin
+
+    Write(4,RealToString(g_TruckWt1,6,0)+Chr$(13));
+    
+    StartTimer(14);
+    
+    return;
+    
+end;
+
+handler Timer14Trip;
+
+begin
+
+    Write(4,Chr$(34)+"Drive:          "+Chr$(13));
+   
+    StartTimer(15);
+    return;
+    
+end;
+
+handler Timer15Trip;
+
+begin
+
+    Write(4,RealToString(g_TruckWt2,6,0)+Chr$(13));
+    
+    StartTimer(16);
+    return;
+    
+end;
+
+handler Timer16Trip;
+
+begin
+    
+    Write(4,Chr$(34)+"Trailer:          "+Chr$(13));
+    
+    StartTimer(17);
+    return;
+    
+end;
+
+handler Timer17Trip;
+
+begin
+    
+    Write(4,RealToString(g_TruckWt3,6,0)+Chr$(13));
+    
+    StartTimer(10);
+    return;
+    
+end;
+
+
+  
+handler Sp1Trip;
+--Declaration Section
+
+begin
+
+    return;
+
+end; 
+
+handler Enterkeypressed;
+--Declaration Section
+CurrentValue  : integer;
+
+begin
+    
+    if g_Level = 0 then
+    
+      StartInbound;
+      
+    else
+      
+      CurrentValue:=StringToInteger(g_sTruckID[g_iCurrentSelection]);
+        
+      if g_iCurrentSelection < 6 then
+      
+        DisplayStatus(g_sTicket[g_iCurrentSelection]);
+        PromptUser("=>");
+        
+      elsif g_iCurrentSelection = 6 or g_iCurrentSelection = 7 or g_iCurrentSelection = 9 then
+      
+        if g_sTruckID[g_iCurrentSelection] = "1" then
+        
+          g_sTruckID[g_iCurrentSelection]:="0";
+          
+        else
+        
+          g_sTruckID[g_iCurrentSelection]:="1";
+          
+        end if;
+        
+      elsif g_iCurrentSelection = 8 or g_iCurrentSelection = 10 then
+        
+        CurrentValue:=CurrentValue+1;
+        
+        if CurrentValue > 2 then
+        
+          CurrentValue:=0;
+          
+        end if;
+        
+        -- If Axling and more than one scale only allow Pup or None.
+        if g_iCurrentSelection = 10 and g_Scales > 1 and CurrentValue > 1 then
+        
+          CurrentValue:=0;
+          
+        end if;
+          
+        g_sTruckID[g_iCurrentSelection]:=IntegerToString(CurrentValue,1);
+        
+      end if;
+    
+    end if;
+    
+    DisplayConfig;  
+    
+    return;
+
+end;
+
+               
+handler Navupkeypressed;
+--Declaration Section
+
+begin
+    
+    if g_iCurrentSelection > 1 then
+    
+      g_iCurrentSelection:=g_iCurrentSelection - 1;
+      
+      if g_iScreenPosition > g_iCurrentSelection then  -- if first screen record is higher than the
+                                                       -- currently selected record then make them
+        g_iScreenPosition:=g_iCurrentSelection;        -- equal.
+        
+      end if;
+    
+    end if;
+    
+    
+    DisplayConfig;
+      
+    return;
+
+end;
+
+
+handler Navdownkeypressed;
+--Declaration Section
+
+begin
+    
+    if g_iCurrentSelection < g_iInboundTotal then
+    
+      g_iCurrentSelection:=g_iCurrentSelection + 1;
+      
+      if g_iScreenPosition+6 < g_iCurrentSelection then  -- if last screen record is lower than the
+                                                         -- currently selected record then make them
+        g_iScreenPosition:=g_iScreenPosition + 1;        -- equal.
+        
+      end if;
+    
+    end if;       
+    
+      
+    DisplayConfig;  
+    
+    return;
+
+end;
+
+
+
+handler User1Keypressed;
+--Declaration Section
+CurrentError  : integer;
+
+begin
+    
+    g_Reset:=0;
+    if g_Level = 0 then
+      
+      if g_ProcessStep = 0 then
+        
+        EnableHandler(Navkeypressed);
+        DisplayStatus("Enter Truck ID:");
+        PromptUser("=>");
+        --Load_Inbound;
+        --Display_Inbound;
+        
+      elsif g_ProcessStep = 1 then
+        
+        if SaveRecord = 1 then
+          
+          g_Reset:=1;
+          WriteStatusFields("Printing Ticket.");
+          PrintInboundTicket;
+          
+        else
+          
+          g_Reset:=1;
+          WriteStatusFields("ERROR SAVING TICKET");
+          
+        end if;
+      
+      elsif g_ProcessStep = 3 then
+      
+        StopTimer(2);
+        if LoadRecord = 1 then
+          
+          WriteStatusFields("Printing Ticket.");
+          PrintOutBoundTicket;
+          if DeleteRecord(g_CurrentTruckID) = 1 then
+            
+            g_Reset:=1;
+            WriteStatusFields(""); -- This resets the scale
+            
+          else
+            
+            g_Reset:=1;
+            WriteStatusFields("FAILED TO DELETE RECORD");
+            
+          end if;
+          
+        else
+          
+          g_Reset:=1;
+          WriteStatusFields("FAILED TO LOAD RECORD");
+            
+        end if;
+          
+      end if;
+      
+    elsif g_Level = 1 then
+      
+      Save_Config;
+      
+      if g_Remote = 1 then
+      
+        StartTimer(3);
+        
+      elsif g_Remote = 2 then
+      
+        StartTimer(10);
+        
+      end if;
+      
+      ResetScale;
+      
+    end if;
+    
+    return;
+
+end;
+
+handler User2Keypressed;
+--Declaration Section
+
+begin
+    
+    if g_Level = 0 then
+      
+      if g_ProcessStep = 0 then
+      
+        g_ProcessStep:=2;
+        
+        EnableHandler(Navkeypressed);
+        
+        DisplayStatus("Enter Truck ID:");
+        PromptUser("=>");
+      
+      end if;
+      
+    end if;
+    
+    return;
+
+end;
+
+handler User3Keypressed;
+--Declaration Section
+
+begin
+    
+    KeyPress(TimeDateKey);
+    
+    return;
+
+end;
+
+handler User4Keypressed;
+--Declaration Section
+
+begin
+
+    return;
+
+end;
+
+handler User5Keypressed;
+--Declaration Section
+
+begin
+    
+    if g_Level = 0 then
+      
+      if g_ProcessStep = 0 then
+      
+        WriteLn(1,"g_Level = 0");
+        EnableHandler(Navkeypressed);
+        StopTimer(1);
+        StopTimer(2);
+        g_Level:=1;
+        PrepareConfig;
+        DisplayConfig;
+      
+      elsif g_ProcessStep = 1 then
+      
+        ResetScale;
+        
+      end if;
+      
+    end if;
+    
+    return;
+
+end;
+
+handler Userentry;
+--Declaration Section                   
+UserString : string;   
+UserInt    : integer;
+UserReal   : real;
+
+EntryError  : integer;
+TransDB : TransDatabase;
+
+begin 
+    
+    StopTimer(1);
+    
+    UserString := GetEntry;
+    
+    ClosePrompt;  
+    EnableHandler(Numerickeypressed);
+    
+    if EventKey = EnterKey   then
+      
+      if UserString<>"" then
+        
+        if g_Level = 0 then  -- Inbound Routine
+          
+          if g_ProcessStep = 0 then
+            
+            TransDB.Truck:=UserString;
+            
+            if TransDB.FindFirst(2)=SysOk then
+              
+              g_Reset:=1;
+              WriteStatusFields("Truck ID Exists");
+              
+            else
+            
+              g_ProcessStep:=1;  --Set Level to Verify Weight
+              VerifyWeight(UserString);
+            
+            end if;
+          
+          -- Outbound Routine
+          elsif g_ProcessStep = 2 then
+          
+            if FindTruck(UserString) = 0 then     -- Returns a 0 if truck was not found
+              
+              g_Reset:=1;
+              WriteStatusFields("Truck ID Not Found.");
+            
+            else
+              
+              g_ProcessStep:=3;
+              VerifyWeight(UserString);
+              
+            end if;
+            
+          end if;
+              
+        elsif g_Level = 1 then
+          
+          if g_iCurrentSelection < 5 then
+          
+            g_sTruckID[g_iCurrentSelection]:=UserString;
+            
+          elsif g_iCurrentSelection = 5 then
+          
+            UserInt:=StringToInteger(UserString);
+              
+            if UserInt > 0 and UserInt < 4 then
+            
+              g_sTruckID[g_iCurrentSelection]:=UserString;
+              
+            end if;
+            
+          end if;   -- Current Selection for Setup Config
+        
+        end if;  -- g_Level end if
+      
+      else
+      
+        WriteStatusFields("You Must Enter Something.");
+      
+      end if;
+        
+    end if;
+    
+    return;
+    
+end;
+ 
+ 
+       
+  -- End of event handlers.
+  ----------------------------------------------------------------------------
+
+   
+
+
+------------------------------------------------------------------------------
+-- This chunk of code is the system startup event handler.
+
+begin
+   
+  -- Initialize all global variables here. 
+SetTimer(1,400);    -- 4 Second Delay
+SetTimerMode(1,TimerOneShot);
+
+SetTimer(2,50);    -- Timer for Scale Update
+SetTimerMode(2,TimerContinuous);
+StartTimer(2);
+
+SetTimer(3,30);    -- Condec Timer
+SetTimerMode(3,TimerContinuous);
+
+--Weightronix Remote Timers
+
+SetTimerMode(10,TimerOneShot); -- Weightronix remote Total
+SetTimer(10,300);
+  
+SetTimerMode(11,TimerOneShot); -- Weightronix remote 
+SetTimer(11,400);
+
+SetTimerMode(12,TimerOneShot); -- Weightronix remote Steer
+SetTimer(12,300);
+
+SetTimerMode(13,TimerOneShot); -- Weightronix remote 
+SetTimer(13,400);
+
+SetTimerMode(14,TimerOneShot); -- Weightronix remote Drive
+SetTimer(14,300);
+
+SetTimerMode(15,TimerOneShot); -- Weightronix remote
+SetTimer(15,400);
+
+SetTimerMode(16,TimerOneShot); -- Weightronix remote Trailer
+SetTimer(16,300);
+
+SetTimerMode(17,TimerOneShot); -- Weightronix remote
+SetTimer(17,400);
+  
+
+
+-- TotalLocation[1] does not exist as its a single scale.
+g_TotalLocation[2]:=89;
+g_TotalLocation[3]:=88;
+g_TotalLocation[4]:=90;
+
+-- Units Location for all screens
+-- Again Screen 1 has no need for this
+g_UnitsLocation[2]:=33;
+g_UnitsLocation[3]:=32;
+g_UnitsLocation[4]:=38;
+  
+-- Increment the build number every time you make a change and recompile.
+   
+   
+-- Display the version number to the display.
+DisableHandler(Navkeypressed);
+
+Load_Config;
+
+if g_Remote = 1 then
+
+  StartTimer(3);
+  
+elsif g_Remote = 2 then
+
+  StartTimer(10);
+  
+end if;
+
+UpdateDisplay;
+  
+   
+
+end TruckScale; 
+-- This name must match the name following "program" keyword at 
+-- the beginning of the program.
+
